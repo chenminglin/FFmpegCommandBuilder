@@ -1,0 +1,2 @@
+# FFmpegCommandBuilder
+使用构建者模式来生成FFmpeg的命令
