@@ -18,4 +18,11 @@
         android:layout_marginTop="16dp"
         android:textSize="16sp" />
 
+    <Button
+        android:id="@+id/btn_save_to_gallery"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="16dp"
+        android:text="保存到相册" />
+
 </LinearLayout>

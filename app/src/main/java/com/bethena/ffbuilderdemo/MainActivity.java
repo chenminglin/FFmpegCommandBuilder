@@ -6,6 +6,7 @@ import android.content.ContentUris;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.database.Cursor;
+import android.media.MediaMetadataRetriever;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
@@ -16,6 +17,7 @@ import android.widget.Button;
 import android.widget.TextView;
 import android.widget.Toast;
 import android.widget.VideoView;
+import android.app.ProgressDialog;
 
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
@@ -41,6 +43,7 @@ public class MainActivity extends AppCompatActivity {
     private Button btnConvert;
     private VideoView videoView;
     private String selectedVideoPath;
+    private ProgressDialog progressDialog;
     
     private final ActivityResultLauncher<Intent> videoPickerLauncher = registerForActivityResult(
             new ActivityResultContracts.StartActivityForResult(),
@@ -146,7 +149,7 @@ public class MainActivity extends AppCompatActivity {
         // 使用构建者模式创建FFmpeg命令
         String command = FFmpegCommandBuilder.create()
                 .input(cacheFile.getAbsolutePath())
-                .videoCodec("h264_mediacodec")  // 使用 MediaCodec 硬件编码器替代 libx264
+                .videoCodec("h264")  // 使用基础的 h264 编码器
                 .audioCodec("aac")
                 .videoBitRate("1M")
                 .audioBitRate("128k")
@@ -155,8 +158,33 @@ public class MainActivity extends AppCompatActivity {
                 .output(outputPath)
                 .build();
         Log.d("FFmpeg", command);
+        // 创建并显示进度对话框
+        progressDialog = new ProgressDialog(this);
+        progressDialog.setProgressStyle(ProgressDialog.STYLE_HORIZONTAL);
+        progressDialog.setTitle("视频转码中");
+        progressDialog.setMax(100);
+        progressDialog.setCancelable(false);
+        progressDialog.show();
+
+        // 获取视频时长
+        MediaMetadataRetriever retriever = new MediaMetadataRetriever();
+        retriever.setDataSource(cacheFile.getAbsolutePath());
+        String durationStr = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION);
+        long totalDuration = Long.parseLong(durationStr);
+        try {
+            retriever.release();
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+
         // 执行FFmpeg命令
         FFmpegKit.executeAsync(command, session -> {
+            // 关闭进度对话框
+            runOnUiThread(() -> {
+                if (progressDialog != null && progressDialog.isShowing()) {
+                    progressDialog.dismiss();
+                }
+            });
             // 删除缓存文件
             cacheFile.delete();
             // 命令执行完成的回调
@@ -177,6 +205,23 @@ public class MainActivity extends AppCompatActivity {
             Log.d("FFmpeg", log.getMessage());
         }, statistics -> {
             Log.d("FFmpeg", statistics.toString());
+            // 更新进度
+            if (statistics.getTime() > 0 && totalDuration > 0) {
+                double progress = (statistics.getTime() * 100.0f) / totalDuration;
+                runOnUiThread(() -> {
+                    if (progressDialog != null && progressDialog.isShowing()) {
+                        progressDialog.setProgress((int) progress);
+                    }
+                });
+            }
         });
+    }
+
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        if (progressDialog != null && progressDialog.isShowing()) {
+            progressDialog.dismiss();
+        }
     }
 }
